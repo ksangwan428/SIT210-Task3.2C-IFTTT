@@ -1,79 +1,76 @@
 #include <WiFiNINA.h>
-
 #include <BH1750.h>
 #include <Wire.h>
 
-//please enter your sensitive data in the Secret tab
 char ssid[] = "Kartik";
 char pass[] = "12345678";
 
 WiFiClient client;
 BH1750 lightMeter;
 
-char   HOST_NAME[] = "maker.ifttt.com";
-String PATH_NAME  = "/trigger/LIGHTSENSOR/with/key/outsvBk4TNtGNruAgm0cj94YFb1ekaVVzNIjB33akD5";
-String queryString = "?value1=57&value2=25";
+char HOST_NAME[] = "maker.ifttt.com";     // IFTTT Maker service hostname
+String PATH_NAME = "/trigger/LIGHTSENSOR/with/key/outsvBk4TNtGNruAgm0cj94YFb1ekaVVzNIjB33akD5";  // IFTTT endpoint
+String queryString = "?value1=57&value2=25";  // Initial query string with default values
+
+const int thresholdLux = 500;  // Adjust the threshold Lux value as needed
 
 void setup() {
-  // initialize WiFi connection
-  // WiFi.begin(ssid, pass);
-  Serial.begin(9600);
-Serial.print("START");
-  while (!Serial);
+  Serial.begin(9600);   // Initialize serial communication with a baud rate of 9600
+  while (!Serial);      // Wait for the serial connection to be established
 
-  // connect to web server on port 80:
-     WiFi.begin(ssid, pass);
-     Wire.begin();
-while(true)
-  {
-  if (client.connect(HOST_NAME, 80)) {
-    // if connected:
-    Serial.println("Connected to server");
-    break;
-  }
-  else {// if not connected:
-    Serial.println("connection failed");
-    
-  }
-  delay(500);
+  // Connect to Wi-Fi
+  connectToWiFi();
+
+  Wire.begin();          // Initialize the I2C communication
+  lightMeter.begin();    // Initialize the BH1750 light sensor
 }
-lightMeter.begin();
-Serial.println("Connected to server");
-}
+
 void loop() {
-  Serial.print("START");
-  float lux = lightMeter.readLightLevel();
+  float lux = lightMeter.readLightLevel();  // Read the current light level in Lux
+  Serial.print("Current Light Level: ");
+  Serial.println(lux);
 
-  // Serial.println("Light sensor: ");
-  // Serial.p'int(lux);
+  if (lux > thresholdLux) {
+    sendLuxToIFTTT(lux);  // Send Lux value to IFTTT if it's above the threshold
+  }
 
-  queryString +="?value1=" ;
-  queryString += lux;
-  Serial.println(queryString);
+  delay(3000);  // Delay for 3 seconds before taking another reading
+}
 
-  if (lux > 500) {
+void connectToWiFi() {
+  WiFi.begin(ssid, pass);  // Attempt to connect to Wi-Fi using the provided credentials
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {  // Wait until connected
+    Serial.print(".");
+    delay(1000);
+  }
+  Serial.println("\nConnected to WiFi");
+  Serial.print("Local IP Address: ");
+  Serial.println(WiFi.localIP());  // Print the local IP address once connected
+}
 
-    // make a HTTP request:
-    // send HTTP header
-    client.println("GET " + PATH_NAME + queryString + " HTTP/1.1");
-    client.println("Host: " + String(HOST_NAME));
-    client.println("Connection: close");
-    client.println(); // end HTTP header
+void sendLuxToIFTTT(float lux) {
+  if (client.connect(HOST_NAME, 80)) {  // Attempt to connect to the IFTTT server
+    Serial.println("Connected to IFTTT Server");
+    queryString = "?value1=" + String(lux) + "&value2=25";  // Update the Lux value in the query string
 
+    // Send an HTTP GET request to IFTTT
+    client.print("GET " + PATH_NAME + queryString + " HTTP/1.1\r\n");
+    client.print("Host: " + String(HOST_NAME) + "\r\n");
+    client.print("Connection: close\r\n\r\n");
 
     while (client.connected()) {
       if (client.available()) {
-        // read an incoming byte from the server and print it to serial monitor:
         char c = client.read();
-        Serial.print(c);
+        Serial.print(c);  // Print the response from the IFTTT server
       }
     }
 
-    // the server's disconnected, stop the client:
-    client.stop();
-    Serial.println();
-    Serial.println("disconnected");
+    client.stop();  // Disconnect from the IFTTT server
+    Serial.println("\nDisconnected from IFTTT Server");
+  } else {
+    Serial.println("Failed to connect to IFTTT Server");
   }
-  queryString = "";
-  delay(3000);
 }
+
+
